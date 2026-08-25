@@ -12,6 +12,7 @@ import (
 
 	"github.com/prashantkoirala465/sift/internal/api"
 	"github.com/prashantkoirala465/sift/internal/config"
+	"github.com/prashantkoirala465/sift/internal/storage/postgres"
 )
 
 func main() {
@@ -29,6 +30,22 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	logger.Info("applying migrations")
+	if err := postgres.Migrate(cfg.DatabaseURL); err != nil {
+		return err
+	}
+
+	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	_ = postgres.NewStore(pool) // wired into the API surface starting with task #7
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           api.NewRouter(),
@@ -37,9 +54,6 @@ func run(logger *slog.Logger) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
