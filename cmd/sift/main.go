@@ -10,8 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/prashantkoirala465/sift/internal/api"
 	"github.com/prashantkoirala465/sift/internal/config"
+	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
 )
 
@@ -44,11 +47,21 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	_ = postgres.NewStore(pool) // wired into the API surface starting with task #7
+	store := postgres.NewStore(pool, cfg.EncryptionKey)
+
+	var oauthCfg *oauth2.Config
+	if cfg.GoogleConfigured() {
+		oauthCfg = gmail.NewOAuthConfig(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
+	} else {
+		logger.Warn("Google OAuth not configured, /auth/google routes will 503 until SIFT_GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL are set")
+	}
 
 	srv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           api.NewRouter(),
+		Addr: cfg.Addr,
+		Handler: api.NewRouter(api.Deps{
+			OAuthConfig: oauthCfg,
+			TokenStore:  store,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
