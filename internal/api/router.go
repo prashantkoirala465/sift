@@ -17,6 +17,7 @@ import (
 type Deps struct {
 	OAuthConfig *oauth2.Config
 	TokenStore  gmail.TokenStore
+	Store       Store
 }
 
 func NewRouter(deps Deps) http.Handler {
@@ -24,6 +25,8 @@ func NewRouter(deps Deps) http.Handler {
 
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	registerAuthRoutes(mux, deps)
+	registerApplicationRoutes(mux, deps)
+	registerReviewRoutes(mux, deps)
 
 	return mux
 }
@@ -41,4 +44,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Warn("write json response failed", "error", err)
 	}
+}
+
+// writeInternalError logs the real error server-side and returns a generic
+// message to the client -- a storage error can carry details (query text,
+// connection info) that don't belong in an HTTP response body.
+func writeInternalError(w http.ResponseWriter, action string, err error) {
+	slog.Error(action+" failed", "error", err)
+	http.Error(w, "internal error", http.StatusInternalServerError)
 }

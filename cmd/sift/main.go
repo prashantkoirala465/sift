@@ -76,6 +76,7 @@ func run(logger *slog.Logger) error {
 		Handler: api.NewRouter(api.Deps{
 			OAuthConfig: oauthCfg,
 			TokenStore:  store,
+			Store:       store,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
