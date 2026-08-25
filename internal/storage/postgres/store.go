@@ -13,12 +13,15 @@ import (
 )
 
 type Store struct {
-	pool *pgxpool.Pool
-	q    *sqlc.Queries
+	pool          *pgxpool.Pool
+	q             *sqlc.Queries
+	encryptionKey []byte
 }
 
-func NewStore(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool, q: sqlc.New(pool)}
+// encryptionKey must be security.KeySize bytes; it's used only for the
+// secrets in oauth_token.go (see there for why).
+func NewStore(pool *pgxpool.Pool, encryptionKey []byte) *Store {
+	return &Store{pool: pool, q: sqlc.New(pool), encryptionKey: encryptionKey}
 }
 
 func (s *Store) CreateApplication(ctx context.Context, company, roleTitle string, source domain.Source, appliedDate time.Time) (domain.Application, error) {
