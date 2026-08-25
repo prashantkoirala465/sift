@@ -13,6 +13,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/prashantkoirala465/sift/internal/api"
+	"github.com/prashantkoirala465/sift/internal/classify"
 	"github.com/prashantkoirala465/sift/internal/config"
 	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
@@ -57,7 +58,15 @@ func run(logger *slog.Logger) error {
 		logger.Warn("Google OAuth not configured, /auth/google routes will 503 until SIFT_GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL are set")
 	}
 
-	syncWorker := worker.NewSyncWorker(store, oauthCfg, logger)
+	var llmClassifier classify.Classifier
+	if cfg.AnthropicAPIKey != "" {
+		llmClassifier = classify.NewLLMClassifier(cfg.AnthropicAPIKey)
+	} else {
+		logger.Warn("SIFT_ANTHROPIC_API_KEY not set, classifying with rules only")
+	}
+	classifier := classify.NewTieredClassifier(llmClassifier, logger)
+
+	syncWorker := worker.NewSyncWorker(store, oauthCfg, classifier, logger)
 	go syncWorker.Run(ctx, cfg.SyncInterval)
 
 	srv := &http.Server{

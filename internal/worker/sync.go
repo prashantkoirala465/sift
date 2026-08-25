@@ -1,6 +1,6 @@
-// Package worker runs Sift's background jobs. Today that's syncing Gmail;
-// classification and matching hook into the same per-message loop once
-// they exist.
+// Package worker runs Sift's background jobs: syncing Gmail and, per
+// newly-stored message, classifying it. Matching hooks into the same loop
+// once it exists.
 package worker
 
 import (
@@ -12,6 +12,9 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/google/uuid"
+
+	"github.com/prashantkoirala465/sift/internal/classify"
 	"github.com/prashantkoirala465/sift/internal/domain"
 	"github.com/prashantkoirala465/sift/internal/gmail"
 )
@@ -23,6 +26,7 @@ type Store interface {
 	GetSyncState(ctx context.Context) (domain.SyncState, error)
 	UpdateSyncState(ctx context.Context, state domain.SyncState) error
 	InsertEmailMessageIfNew(ctx context.Context, msg domain.EmailMessage) (domain.EmailMessage, bool, error)
+	SetEmailClassification(ctx context.Context, id uuid.UUID, label domain.ClassifiedLabel, confidence float64, source domain.ClassificationSource) error
 }
 
 // initialBackfillQuery bounds the very first sync (and any resync forced by
@@ -35,13 +39,14 @@ const (
 )
 
 type SyncWorker struct {
-	store  Store
-	oauth  *oauth2.Config
-	logger *slog.Logger
+	store      Store
+	oauth      *oauth2.Config
+	classifier *classify.TieredClassifier
+	logger     *slog.Logger
 }
 
-func NewSyncWorker(store Store, oauthCfg *oauth2.Config, logger *slog.Logger) *SyncWorker {
-	return &SyncWorker{store: store, oauth: oauthCfg, logger: logger}
+func NewSyncWorker(store Store, oauthCfg *oauth2.Config, classifier *classify.TieredClassifier, logger *slog.Logger) *SyncWorker {
+	return &SyncWorker{store: store, oauth: oauthCfg, classifier: classifier, logger: logger}
 }
 
 // Run ticks every interval until ctx is cancelled. A failed tick is logged
@@ -162,20 +167,33 @@ func (w *SyncWorker) ingest(ctx context.Context, svc *gmail.Service, ids []strin
 			continue
 		}
 
-		_, isNew, err := w.store.InsertEmailMessageIfNew(ctx, domain.EmailMessage{
+		stored, isNew, err := w.store.InsertEmailMessageIfNew(ctx, domain.EmailMessage{
 			GmailMessageID: msg.ID,
 			GmailThreadID:  msg.ThreadID,
 			FromAddress:    msg.From,
 			FromDomain:     msg.FromDomain,
 			Subject:        msg.Subject,
+			Snippet:        msg.Snippet,
 			ReceivedAt:     msg.ReceivedAt,
 		})
 		if err != nil {
 			w.logger.Error("sync tick: store message failed, skipping", "gmail_message_id", id, "error", err)
 			continue
 		}
-		if isNew {
-			inserted++
+		if !isNew {
+			continue
+		}
+		inserted++
+
+		// Classification failure here would only lose the label, never the
+		// message -- it's already durably stored above.
+		result := w.classifier.Classify(ctx, classify.Input{
+			Subject:    msg.Subject,
+			Snippet:    msg.Snippet,
+			FromDomain: msg.FromDomain,
+		})
+		if err := w.store.SetEmailClassification(ctx, stored.ID, result.Label, result.Confidence, result.Source); err != nil {
+			w.logger.Error("sync tick: save classification failed", "gmail_message_id", id, "error", err)
 		}
 	}
 	return inserted

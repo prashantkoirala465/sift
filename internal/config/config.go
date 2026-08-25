@@ -32,6 +32,10 @@ type Config struct {
 
 	// SyncInterval is how often the Gmail sync worker ticks.
 	SyncInterval time.Duration
+
+	// AnthropicAPIKey enables the LLM classification fallback tier.
+	// Optional -- without it, Sift classifies with rules only.
+	AnthropicAPIKey string
 }
 
 func Load() (Config, error) {
@@ -41,6 +45,7 @@ func Load() (Config, error) {
 		GoogleClientID:     os.Getenv("SIFT_GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("SIFT_GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  os.Getenv("SIFT_GOOGLE_REDIRECT_URL"),
+		AnthropicAPIKey:    os.Getenv("SIFT_ANTHROPIC_API_KEY"),
 	}
 
 	if cfg.DatabaseURL == "" {
