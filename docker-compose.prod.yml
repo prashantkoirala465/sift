@@ -1,0 +1,38 @@
+# Full self-hosted stack: Postgres + Sift. See README.md for the
+# environment variables this expects (an .env file works fine with
+# `docker compose --env-file .env -f docker-compose.prod.yml up -d`).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sift
+      POSTGRES_PASSWORD: ${SIFT_DB_PASSWORD:?set SIFT_DB_PASSWORD}
+      POSTGRES_DB: sift
+    volumes:
+      - sift-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sift"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  sift:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SIFT_DATABASE_URL: postgres://sift:${SIFT_DB_PASSWORD:?set SIFT_DB_PASSWORD}@postgres:5432/sift?sslmode=disable
+      SIFT_ENCRYPTION_KEY: ${SIFT_ENCRYPTION_KEY:?set SIFT_ENCRYPTION_KEY, e.g. openssl rand -base64 32}
+      SIFT_AUTH_PASSWORD: ${SIFT_AUTH_PASSWORD:?set SIFT_AUTH_PASSWORD}
+      SIFT_GOOGLE_CLIENT_ID: ${SIFT_GOOGLE_CLIENT_ID:-}
+      SIFT_GOOGLE_CLIENT_SECRET: ${SIFT_GOOGLE_CLIENT_SECRET:-}
+      SIFT_GOOGLE_REDIRECT_URL: ${SIFT_GOOGLE_REDIRECT_URL:-}
+      SIFT_ANTHROPIC_API_KEY: ${SIFT_ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  sift-postgres:
