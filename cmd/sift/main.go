@@ -14,6 +14,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/prashantkoirala465/sift/internal/api"
+	"github.com/prashantkoirala465/sift/internal/auth"
 	"github.com/prashantkoirala465/sift/internal/classify"
 	"github.com/prashantkoirala465/sift/internal/config"
 	"github.com/prashantkoirala465/sift/internal/gmail"
@@ -74,21 +75,38 @@ func run(logger *slog.Logger) error {
 	syncWorker := worker.NewSyncWorker(store, oauthCfg, classifier, matcher, logger)
 	go syncWorker.Run(ctx, cfg.SyncInterval)
 
-	mux := http.NewServeMux()
-	api.RegisterRoutes(mux, api.Deps{
+	appMux := http.NewServeMux()
+	api.RegisterRoutes(appMux, api.Deps{
 		OAuthConfig: oauthCfg,
 		TokenStore:  store,
 		Store:       store,
 	})
-	web.RegisterRoutes(mux, web.Deps{
+	web.RegisterRoutes(appMux, web.Deps{
 		Store:      store,
 		TokenStore: store,
 	})
-	mux.Handle("GET /debug/vars", expvar.Handler())
+	appMux.Handle("GET /debug/vars", expvar.Handler())
+
+	var appHandler http.Handler = appMux
+	if cfg.AuthPassword != "" {
+		appHandler = auth.BasicAuthMiddleware(cfg.AuthPassword, appHandler)
+	} else {
+		logger.Warn("SIFT_AUTH_PASSWORD not set: the web UI and API are unauthenticated. " +
+			"Do not expose this instance beyond localhost or a trusted private network without setting one.")
+	}
+
+	// /healthz stays outside auth -- container/orchestrator health checks
+	// shouldn't need credentials.
+	rootMux := http.NewServeMux()
+	rootMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	rootMux.Handle("/", appHandler)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           observability.LoggingMiddleware(mux),
+		Handler:           observability.LoggingMiddleware(rootMux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

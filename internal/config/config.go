@@ -36,6 +36,11 @@ type Config struct {
 	// AnthropicAPIKey enables the LLM classification fallback tier.
 	// Optional -- without it, Sift classifies with rules only.
 	AnthropicAPIKey string
+
+	// AuthPassword, if set, gates the entire web UI and API behind HTTP
+	// Basic Auth. Strongly recommended for anything reachable beyond
+	// localhost; optional so local development doesn't need it.
+	AuthPassword string
 }
 
 func Load() (Config, error) {
@@ -46,6 +51,7 @@ func Load() (Config, error) {
 		GoogleClientSecret: os.Getenv("SIFT_GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:  os.Getenv("SIFT_GOOGLE_REDIRECT_URL"),
 		AnthropicAPIKey:    os.Getenv("SIFT_ANTHROPIC_API_KEY"),
+		AuthPassword:       os.Getenv("SIFT_AUTH_PASSWORD"),
 	}
 
 	if cfg.DatabaseURL == "" {
