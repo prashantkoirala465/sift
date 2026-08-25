@@ -147,6 +147,39 @@ func (s *Store) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID str
 	return emailMessageFromRow(row), nil
 }
 
+func (s *Store) GetEmailMessage(ctx context.Context, id uuid.UUID) (domain.EmailMessage, error) {
+	row, err := s.q.GetEmailMessage(ctx, pgUUID(id))
+	if err != nil {
+		return domain.EmailMessage{}, fmt.Errorf("get email message: %w", err)
+	}
+	return emailMessageFromRow(row), nil
+}
+
+func (s *Store) ListEmailMessagesByReviewStatus(ctx context.Context, status domain.ReviewStatus) ([]domain.EmailMessage, error) {
+	rows, err := s.q.ListEmailMessagesByReviewStatus(ctx, string(status))
+	if err != nil {
+		return nil, fmt.Errorf("list email messages by review status: %w", err)
+	}
+	out := make([]domain.EmailMessage, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, emailMessageFromRow(row))
+	}
+	return out, nil
+}
+
+// SetEmailReviewStatus updates review status alone, for the "ignore" path
+// where there's no application to link -- SetEmailMatch always requires
+// one.
+func (s *Store) SetEmailReviewStatus(ctx context.Context, id uuid.UUID, status domain.ReviewStatus) error {
+	if err := s.q.SetEmailReviewStatus(ctx, sqlc.SetEmailReviewStatusParams{
+		ID:           pgUUID(id),
+		ReviewStatus: string(status),
+	}); err != nil {
+		return fmt.Errorf("set email review status: %w", err)
+	}
+	return nil
+}
+
 // SetEmailClassification records the classifier's verdict for a message.
 // Separate from insertion because classification (and its LLM fallback
 // tier) happens after the message is already durably stored -- a

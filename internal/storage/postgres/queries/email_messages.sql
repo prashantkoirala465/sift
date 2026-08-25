@@ -31,3 +31,12 @@ SET matched_application_id = $2,
     match_confidence = $3,
     review_status = $4
 WHERE id = $1;
+
+-- name: SetEmailReviewStatus :exec
+UPDATE email_messages SET review_status = $2 WHERE id = $1;
+
+-- name: GetEmailMessage :one
+SELECT * FROM email_messages WHERE id = $1;
+
+-- name: ListEmailMessagesByReviewStatus :many
+SELECT * FROM email_messages WHERE review_status = $1 ORDER BY received_at DESC;

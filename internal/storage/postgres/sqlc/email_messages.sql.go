@@ -25,6 +25,34 @@ func (q *Queries) FindApplicationIDByThreadID(ctx context.Context, gmailThreadID
 	return matched_application_id, err
 }
 
+const getEmailMessage = `-- name: GetEmailMessage :one
+SELECT id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at, snippet FROM email_messages WHERE id = $1
+`
+
+func (q *Queries) GetEmailMessage(ctx context.Context, id pgtype.UUID) (EmailMessage, error) {
+	row := q.db.QueryRow(ctx, getEmailMessage, id)
+	var i EmailMessage
+	err := row.Scan(
+		&i.ID,
+		&i.GmailMessageID,
+		&i.GmailThreadID,
+		&i.FromAddress,
+		&i.FromDomain,
+		&i.Subject,
+		&i.ReceivedAt,
+		&i.ClassifiedLabel,
+		&i.ClassificationConfidence,
+		&i.ClassificationSource,
+		&i.MatchedApplicationID,
+		&i.MatchConfidence,
+		&i.ReviewStatus,
+		&i.ProcessedAt,
+		&i.CreatedAt,
+		&i.Snippet,
+	)
+	return i, err
+}
+
 const getEmailMessageByGmailID = `-- name: GetEmailMessageByGmailID :one
 SELECT id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at, snippet FROM email_messages WHERE gmail_message_id = $1
 `
@@ -127,6 +155,47 @@ func (q *Queries) ListDistinctMatchedApplicationsByDomain(ctx context.Context, f
 	return items, nil
 }
 
+const listEmailMessagesByReviewStatus = `-- name: ListEmailMessagesByReviewStatus :many
+SELECT id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at, snippet FROM email_messages WHERE review_status = $1 ORDER BY received_at DESC
+`
+
+func (q *Queries) ListEmailMessagesByReviewStatus(ctx context.Context, reviewStatus string) ([]EmailMessage, error) {
+	rows, err := q.db.Query(ctx, listEmailMessagesByReviewStatus, reviewStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmailMessage
+	for rows.Next() {
+		var i EmailMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.GmailMessageID,
+			&i.GmailThreadID,
+			&i.FromAddress,
+			&i.FromDomain,
+			&i.Subject,
+			&i.ReceivedAt,
+			&i.ClassifiedLabel,
+			&i.ClassificationConfidence,
+			&i.ClassificationSource,
+			&i.MatchedApplicationID,
+			&i.MatchConfidence,
+			&i.ReviewStatus,
+			&i.ProcessedAt,
+			&i.CreatedAt,
+			&i.Snippet,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setEmailClassification = `-- name: SetEmailClassification :exec
 UPDATE email_messages
 SET classified_label = $2,
@@ -175,5 +244,19 @@ func (q *Queries) SetEmailMatch(ctx context.Context, arg SetEmailMatchParams) er
 		arg.MatchConfidence,
 		arg.ReviewStatus,
 	)
+	return err
+}
+
+const setEmailReviewStatus = `-- name: SetEmailReviewStatus :exec
+UPDATE email_messages SET review_status = $2 WHERE id = $1
+`
+
+type SetEmailReviewStatusParams struct {
+	ID           pgtype.UUID `json:"id"`
+	ReviewStatus string      `json:"review_status"`
+}
+
+func (q *Queries) SetEmailReviewStatus(ctx context.Context, arg SetEmailReviewStatusParams) error {
+	_, err := q.db.Exec(ctx, setEmailReviewStatus, arg.ID, arg.ReviewStatus)
 	return err
 }
