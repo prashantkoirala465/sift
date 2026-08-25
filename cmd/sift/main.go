@@ -18,6 +18,7 @@ import (
 	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/match"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
+	"github.com/prashantkoirala465/sift/internal/web"
 	"github.com/prashantkoirala465/sift/internal/worker"
 )
 
@@ -71,13 +72,20 @@ func run(logger *slog.Logger) error {
 	syncWorker := worker.NewSyncWorker(store, oauthCfg, classifier, matcher, logger)
 	go syncWorker.Run(ctx, cfg.SyncInterval)
 
+	mux := http.NewServeMux()
+	api.RegisterRoutes(mux, api.Deps{
+		OAuthConfig: oauthCfg,
+		TokenStore:  store,
+		Store:       store,
+	})
+	web.RegisterRoutes(mux, web.Deps{
+		Store:      store,
+		TokenStore: store,
+	})
+
 	srv := &http.Server{
-		Addr: cfg.Addr,
-		Handler: api.NewRouter(api.Deps{
-			OAuthConfig: oauthCfg,
-			TokenStore:  store,
-			Store:       store,
-		}),
+		Addr:              cfg.Addr,
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
