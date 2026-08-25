@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CreateApplication(ctx context.Context, arg CreateApplicationParams) (Application, error)
+	FindApplicationIDByThreadID(ctx context.Context, gmailThreadID string) (pgtype.UUID, error)
 	GetApplication(ctx context.Context, id pgtype.UUID) (Application, error)
 	GetEmailMessageByGmailID(ctx context.Context, gmailMessageID string) (EmailMessage, error)
 	GetOAuthToken(ctx context.Context) (OauthToken, error)
@@ -19,8 +20,10 @@ type Querier interface {
 	InsertEmailMessageIfNew(ctx context.Context, arg InsertEmailMessageIfNewParams) (EmailMessage, error)
 	InsertStageEvent(ctx context.Context, arg InsertStageEventParams) (StageEvent, error)
 	ListApplications(ctx context.Context) ([]Application, error)
+	ListDistinctMatchedApplicationsByDomain(ctx context.Context, fromDomain string) ([]pgtype.UUID, error)
 	ListStageEventsForApplication(ctx context.Context, applicationID pgtype.UUID) ([]StageEvent, error)
 	SetEmailClassification(ctx context.Context, arg SetEmailClassificationParams) error
+	SetEmailMatch(ctx context.Context, arg SetEmailMatchParams) error
 	UpdateApplicationStage(ctx context.Context, arg UpdateApplicationStageParams) error
 	UpdateSyncState(ctx context.Context, arg UpdateSyncStateParams) error
 	UpsertOAuthToken(ctx context.Context, arg UpsertOAuthTokenParams) error

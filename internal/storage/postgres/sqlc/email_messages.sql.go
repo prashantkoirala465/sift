@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const findApplicationIDByThreadID = `-- name: FindApplicationIDByThreadID :one
+SELECT matched_application_id FROM email_messages
+WHERE gmail_thread_id = $1 AND matched_application_id IS NOT NULL
+ORDER BY received_at DESC
+LIMIT 1
+`
+
+func (q *Queries) FindApplicationIDByThreadID(ctx context.Context, gmailThreadID string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, findApplicationIDByThreadID, gmailThreadID)
+	var matched_application_id pgtype.UUID
+	err := row.Scan(&matched_application_id)
+	return matched_application_id, err
+}
+
 const getEmailMessageByGmailID = `-- name: GetEmailMessageByGmailID :one
 SELECT id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at, snippet FROM email_messages WHERE gmail_message_id = $1
 `
@@ -88,6 +102,31 @@ func (q *Queries) InsertEmailMessageIfNew(ctx context.Context, arg InsertEmailMe
 	return i, err
 }
 
+const listDistinctMatchedApplicationsByDomain = `-- name: ListDistinctMatchedApplicationsByDomain :many
+SELECT DISTINCT matched_application_id FROM email_messages
+WHERE from_domain = $1 AND matched_application_id IS NOT NULL
+`
+
+func (q *Queries) ListDistinctMatchedApplicationsByDomain(ctx context.Context, fromDomain string) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listDistinctMatchedApplicationsByDomain, fromDomain)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var matched_application_id pgtype.UUID
+		if err := rows.Scan(&matched_application_id); err != nil {
+			return nil, err
+		}
+		items = append(items, matched_application_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setEmailClassification = `-- name: SetEmailClassification :exec
 UPDATE email_messages
 SET classified_label = $2,
@@ -110,6 +149,31 @@ func (q *Queries) SetEmailClassification(ctx context.Context, arg SetEmailClassi
 		arg.ClassifiedLabel,
 		arg.ClassificationConfidence,
 		arg.ClassificationSource,
+	)
+	return err
+}
+
+const setEmailMatch = `-- name: SetEmailMatch :exec
+UPDATE email_messages
+SET matched_application_id = $2,
+    match_confidence = $3,
+    review_status = $4
+WHERE id = $1
+`
+
+type SetEmailMatchParams struct {
+	ID                   pgtype.UUID `json:"id"`
+	MatchedApplicationID pgtype.UUID `json:"matched_application_id"`
+	MatchConfidence      *float64    `json:"match_confidence"`
+	ReviewStatus         string      `json:"review_status"`
+}
+
+func (q *Queries) SetEmailMatch(ctx context.Context, arg SetEmailMatchParams) error {
+	_, err := q.db.Exec(ctx, setEmailMatch,
+		arg.ID,
+		arg.MatchedApplicationID,
+		arg.MatchConfidence,
+		arg.ReviewStatus,
 	)
 	return err
 }

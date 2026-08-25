@@ -14,3 +14,20 @@ SET classified_label = $2,
     classification_source = $4,
     processed_at = now()
 WHERE id = $1;
+
+-- name: FindApplicationIDByThreadID :one
+SELECT matched_application_id FROM email_messages
+WHERE gmail_thread_id = $1 AND matched_application_id IS NOT NULL
+ORDER BY received_at DESC
+LIMIT 1;
+
+-- name: ListDistinctMatchedApplicationsByDomain :many
+SELECT DISTINCT matched_application_id FROM email_messages
+WHERE from_domain = $1 AND matched_application_id IS NOT NULL;
+
+-- name: SetEmailMatch :exec
+UPDATE email_messages
+SET matched_application_id = $2,
+    match_confidence = $3,
+    review_status = $4
+WHERE id = $1;
