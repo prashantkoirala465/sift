@@ -16,6 +16,7 @@ import (
 	"github.com/prashantkoirala465/sift/internal/classify"
 	"github.com/prashantkoirala465/sift/internal/config"
 	"github.com/prashantkoirala465/sift/internal/gmail"
+	"github.com/prashantkoirala465/sift/internal/match"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
 	"github.com/prashantkoirala465/sift/internal/worker"
 )
@@ -65,8 +66,9 @@ func run(logger *slog.Logger) error {
 		logger.Warn("SIFT_ANTHROPIC_API_KEY not set, classifying with rules only")
 	}
 	classifier := classify.NewTieredClassifier(llmClassifier, logger)
+	matcher := match.NewMatcher(store, logger)
 
-	syncWorker := worker.NewSyncWorker(store, oauthCfg, classifier, logger)
+	syncWorker := worker.NewSyncWorker(store, oauthCfg, classifier, matcher, logger)
 	go syncWorker.Run(ctx, cfg.SyncInterval)
 
 	srv := &http.Server{

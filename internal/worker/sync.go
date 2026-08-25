@@ -1,6 +1,5 @@
-// Package worker runs Sift's background jobs: syncing Gmail and, per
-// newly-stored message, classifying it. Matching hooks into the same loop
-// once it exists.
+// Package worker runs Sift's background jobs: syncing Gmail, classifying
+// each newly-stored message, and matching it to a tracked application.
 package worker
 
 import (
@@ -17,12 +16,14 @@ import (
 	"github.com/prashantkoirala465/sift/internal/classify"
 	"github.com/prashantkoirala465/sift/internal/domain"
 	"github.com/prashantkoirala465/sift/internal/gmail"
+	"github.com/prashantkoirala465/sift/internal/match"
 )
 
 // Store is what the sync worker needs from storage, kept narrow so this
 // package doesn't depend on Postgres directly.
 type Store interface {
 	gmail.TokenStore
+	match.Store
 	GetSyncState(ctx context.Context) (domain.SyncState, error)
 	UpdateSyncState(ctx context.Context, state domain.SyncState) error
 	InsertEmailMessageIfNew(ctx context.Context, msg domain.EmailMessage) (domain.EmailMessage, bool, error)
@@ -42,11 +43,12 @@ type SyncWorker struct {
 	store      Store
 	oauth      *oauth2.Config
 	classifier *classify.TieredClassifier
+	matcher    *match.Matcher
 	logger     *slog.Logger
 }
 
-func NewSyncWorker(store Store, oauthCfg *oauth2.Config, classifier *classify.TieredClassifier, logger *slog.Logger) *SyncWorker {
-	return &SyncWorker{store: store, oauth: oauthCfg, classifier: classifier, logger: logger}
+func NewSyncWorker(store Store, oauthCfg *oauth2.Config, classifier *classify.TieredClassifier, matcher *match.Matcher, logger *slog.Logger) *SyncWorker {
+	return &SyncWorker{store: store, oauth: oauthCfg, classifier: classifier, matcher: matcher, logger: logger}
 }
 
 // Run ticks every interval until ctx is cancelled. A failed tick is logged
@@ -194,6 +196,12 @@ func (w *SyncWorker) ingest(ctx context.Context, svc *gmail.Service, ids []strin
 		})
 		if err := w.store.SetEmailClassification(ctx, stored.ID, result.Label, result.Confidence, result.Source); err != nil {
 			w.logger.Error("sync tick: save classification failed", "gmail_message_id", id, "error", err)
+			continue
+		}
+
+		stored.ClassifiedLabel = &result.Label
+		if err := w.matcher.Resolve(ctx, stored); err != nil {
+			w.logger.Error("sync tick: match/resolve failed", "gmail_message_id", id, "error", err)
 		}
 	}
 	return inserted
