@@ -17,6 +17,15 @@ const (
 	SourceOther       Source = "other"
 )
 
+func (s Source) Valid() bool {
+	switch s {
+	case SourceLinkedIn, SourceReferral, SourceCompanySite, SourceJobBoard, SourceOther:
+		return true
+	default:
+		return false
+	}
+}
+
 type Application struct {
 	ID           uuid.UUID
 	Company      string
