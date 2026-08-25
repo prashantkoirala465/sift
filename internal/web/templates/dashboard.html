@@ -1,0 +1,43 @@
+{{define "content"}}
+<h1>Applications</h1>
+
+{{if not .GmailConnected}}
+<div class="banner">
+  Gmail isn't connected yet. <a href="/auth/google/login">Connect your Gmail account</a>
+  to start tracking status changes automatically.
+</div>
+{{end}}
+
+<form class="inline" method="post" action="/applications">
+  <input type="text" name="company" placeholder="Company" required>
+  <input type="text" name="role_title" placeholder="Role" required>
+  <select name="source">
+    <option value="linkedin">LinkedIn</option>
+    <option value="referral">Referral</option>
+    <option value="company_site">Company site</option>
+    <option value="job_board">Job board</option>
+    <option value="other">Other</option>
+  </select>
+  <input type="date" name="applied_date" required>
+  <button type="submit">Add application</button>
+</form>
+
+<div class="board">
+  {{range .Columns}}
+  <div class="column">
+    <h2>{{.Title}}</h2>
+    {{if .Applications}}
+      {{range .Applications}}
+      <a class="card" href="/applications/{{.ID}}">
+        <div class="company">{{.Company}}</div>
+        <div class="role">{{.RoleTitle}}</div>
+        {{if .Terminal}}<span class="stage-badge stage-{{.Stage}}">{{.Stage}}</span>{{end}}
+      </a>
+      {{end}}
+    {{else}}
+      <div class="empty">Nothing here</div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}

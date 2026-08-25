@@ -1,0 +1,37 @@
+{{define "content"}}
+<h1>Review queue</h1>
+{{if .Items}}
+<table>
+<thead>
+<tr><th>From</th><th>Subject</th><th>Classified as</th><th>Match</th><th></th></tr>
+</thead>
+<tbody>
+{{range .Items}}
+{{$item := .}}
+<tr id="review-{{$item.ID}}">
+  <td>{{$item.FromAddress}}</td>
+  <td>{{$item.Subject}}<div class="snippet">{{$item.Snippet}}</div></td>
+  <td>{{if $item.ClassifiedLabel}}{{$item.ClassifiedLabel}}{{else}}&mdash;{{end}}</td>
+  <td>
+    <form hx-post="/review-queue/{{$item.ID}}/confirm" hx-target="#review-{{$item.ID}}" hx-swap="outerHTML">
+      <select name="application_id">
+        {{range $.Applications}}
+        <option value="{{.ID}}" {{if eq .ID $item.SuggestedApplicationID}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      <button type="submit">Confirm</button>
+    </form>
+  </td>
+  <td>
+    <form hx-post="/review-queue/{{$item.ID}}/ignore" hx-target="#review-{{$item.ID}}" hx-swap="outerHTML">
+      <button type="submit" class="secondary">Ignore</button>
+    </form>
+  </td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{else}}
+<div class="empty">Nothing to review right now.</div>
+{{end}}
+{{end}}
