@@ -38,13 +38,14 @@ func (q *Queries) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID s
 	return i, err
 }
 
-const insertEmailMessage = `-- name: InsertEmailMessage :one
+const insertEmailMessageIfNew = `-- name: InsertEmailMessageIfNew :one
 INSERT INTO email_messages (gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at)
 VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (gmail_message_id) DO NOTHING
 RETURNING id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at
 `
 
-type InsertEmailMessageParams struct {
+type InsertEmailMessageIfNewParams struct {
 	GmailMessageID string             `json:"gmail_message_id"`
 	GmailThreadID  string             `json:"gmail_thread_id"`
 	FromAddress    string             `json:"from_address"`
@@ -53,8 +54,8 @@ type InsertEmailMessageParams struct {
 	ReceivedAt     pgtype.Timestamptz `json:"received_at"`
 }
 
-func (q *Queries) InsertEmailMessage(ctx context.Context, arg InsertEmailMessageParams) (EmailMessage, error) {
-	row := q.db.QueryRow(ctx, insertEmailMessage,
+func (q *Queries) InsertEmailMessageIfNew(ctx context.Context, arg InsertEmailMessageIfNewParams) (EmailMessage, error) {
+	row := q.db.QueryRow(ctx, insertEmailMessageIfNew,
 		arg.GmailMessageID,
 		arg.GmailThreadID,
 		arg.FromAddress,

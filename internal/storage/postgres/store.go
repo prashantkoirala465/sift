@@ -2,10 +2,13 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/prashantkoirala465/sift/internal/domain"
@@ -113,8 +116,12 @@ func (s *Store) ListStageEvents(ctx context.Context, applicationID uuid.UUID) ([
 	return out, nil
 }
 
-func (s *Store) InsertEmailMessage(ctx context.Context, msg domain.EmailMessage) (domain.EmailMessage, error) {
-	row, err := s.q.InsertEmailMessage(ctx, sqlc.InsertEmailMessageParams{
+// InsertEmailMessageIfNew inserts msg, or does nothing if gmail_message_id
+// already exists -- the sync worker re-lists an overlap window on every
+// tick by design (see SyncWorker.tick), so duplicate IDs are the normal
+// case, not an error.
+func (s *Store) InsertEmailMessageIfNew(ctx context.Context, msg domain.EmailMessage) (domain.EmailMessage, bool, error) {
+	row, err := s.q.InsertEmailMessageIfNew(ctx, sqlc.InsertEmailMessageIfNewParams{
 		GmailMessageID: msg.GmailMessageID,
 		GmailThreadID:  msg.GmailThreadID,
 		FromAddress:    msg.FromAddress,
@@ -123,9 +130,12 @@ func (s *Store) InsertEmailMessage(ctx context.Context, msg domain.EmailMessage)
 		ReceivedAt:     pgTimestamptz(msg.ReceivedAt),
 	})
 	if err != nil {
-		return domain.EmailMessage{}, fmt.Errorf("insert email message: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.EmailMessage{}, false, nil
+		}
+		return domain.EmailMessage{}, false, fmt.Errorf("insert email message: %w", err)
 	}
-	return emailMessageFromRow(row), nil
+	return emailMessageFromRow(row), true, nil
 }
 
 func (s *Store) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID string) (domain.EmailMessage, error) {
@@ -134,4 +144,31 @@ func (s *Store) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID str
 		return domain.EmailMessage{}, fmt.Errorf("get email message: %w", err)
 	}
 	return emailMessageFromRow(row), nil
+}
+
+func (s *Store) GetSyncState(ctx context.Context) (domain.SyncState, error) {
+	row, err := s.q.GetSyncState(ctx)
+	if err != nil {
+		return domain.SyncState{}, fmt.Errorf("get sync state: %w", err)
+	}
+	state := domain.SyncState{LastHistoryID: row.LastHistoryID}
+	if row.LastSyncedAt.Valid {
+		t := row.LastSyncedAt.Time
+		state.LastSyncedAt = &t
+	}
+	return state, nil
+}
+
+func (s *Store) UpdateSyncState(ctx context.Context, state domain.SyncState) error {
+	var syncedAt pgtype.Timestamptz
+	if state.LastSyncedAt != nil {
+		syncedAt = pgTimestamptz(*state.LastSyncedAt)
+	}
+	if err := s.q.UpdateSyncState(ctx, sqlc.UpdateSyncStateParams{
+		LastHistoryID: state.LastHistoryID,
+		LastSyncedAt:  syncedAt,
+	}); err != nil {
+		return fmt.Errorf("update sync state: %w", err)
+	}
+	return nil
 }

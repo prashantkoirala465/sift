@@ -58,3 +58,10 @@ type StageEvent struct {
 	Note          string             `json:"note"`
 	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
 }
+
+type SyncState struct {
+	ID            int16              `json:"id"`
+	LastHistoryID string             `json:"last_history_id"`
+	LastSyncedAt  pgtype.Timestamptz `json:"last_synced_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}

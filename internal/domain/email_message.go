@@ -57,3 +57,11 @@ type EmailMessage struct {
 	ProcessedAt              *time.Time
 	CreatedAt                time.Time
 }
+
+// SyncState tracks the single Gmail sync checkpoint. An empty
+// LastHistoryID means no sync has completed yet -- the next tick does a
+// bounded historical backfill instead of an incremental History.List call.
+type SyncState struct {
+	LastHistoryID string
+	LastSyncedAt  *time.Time
+}

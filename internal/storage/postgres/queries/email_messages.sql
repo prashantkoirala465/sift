@@ -1,6 +1,7 @@
--- name: InsertEmailMessage :one
+-- name: InsertEmailMessageIfNew :one
 INSERT INTO email_messages (gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at)
 VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (gmail_message_id) DO NOTHING
 RETURNING *;
 
 -- name: GetEmailMessageByGmailID :one
