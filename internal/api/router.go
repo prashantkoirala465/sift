@@ -20,14 +20,19 @@ type Deps struct {
 	Store       Store
 }
 
-func NewRouter(deps Deps) http.Handler {
-	mux := http.NewServeMux()
-
+// RegisterRoutes adds Sift's JSON API to mux. Exported (not just NewRouter)
+// so main can register the HTML UI on the same mux instead of nesting two
+// separate handlers behind a path prefix.
+func RegisterRoutes(mux *http.ServeMux, deps Deps) {
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	registerAuthRoutes(mux, deps)
 	registerApplicationRoutes(mux, deps)
 	registerReviewRoutes(mux, deps)
+}
 
+func NewRouter(deps Deps) http.Handler {
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, deps)
 	return mux
 }
 
