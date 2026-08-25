@@ -19,6 +19,14 @@ const (
 	StageWithdrawn Stage = "withdrawn"
 )
 
+// AllStages lists every valid stage, in pipeline order. For callers that
+// need to enumerate stages -- e.g. a UI offering only the valid next
+// stages via CanTransition.
+var AllStages = []Stage{
+	StageApplied, StageScreening, StageInterview, StageOffer,
+	StageAccepted, StageDeclined, StageRejected, StageWithdrawn,
+}
+
 func (s Stage) Valid() bool {
 	switch s {
 	case StageApplied, StageScreening, StageInterview, StageOffer,
