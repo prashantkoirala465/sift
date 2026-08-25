@@ -24,7 +24,12 @@ var atsDomains = []string{
 	"successfactors.com",
 }
 
-func isATSDomain(fromDomain string) bool {
+// IsKnownATSDomain reports whether fromDomain belongs to a shared ATS
+// platform. Exported because the matcher needs the same fact for a
+// different reason: a domain shared across many companies is useless as a
+// per-company matching signal, however useful it is as a classification
+// signal here.
+func IsKnownATSDomain(fromDomain string) bool {
 	fromDomain = strings.ToLower(fromDomain)
 	for _, suffix := range atsDomains {
 		if fromDomain == suffix || strings.HasSuffix(fromDomain, "."+suffix) {
@@ -67,7 +72,7 @@ type RuleClassifier struct{}
 
 func (RuleClassifier) Classify(in Input) Result {
 	text := strings.ToLower(in.Subject + " " + in.Snippet)
-	knownATS := isATSDomain(in.FromDomain)
+	knownATS := IsKnownATSDomain(in.FromDomain)
 
 	switch {
 	case matchesAny(text, rejectionPhrases):
