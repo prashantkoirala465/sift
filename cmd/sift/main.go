@@ -87,7 +87,11 @@ func run(logger *slog.Logger) error {
 	})
 	appMux.Handle("GET /debug/vars", expvar.Handler())
 
-	var appHandler http.Handler = appMux
+	// Origin/Referer checking applies regardless of whether Basic Auth is
+	// configured -- it's not an auth mechanism, it's what makes Basic Auth
+	// (which has no CSRF protection of its own) safe to use for
+	// state-changing requests at all.
+	appHandler := auth.OriginCheckMiddleware(appMux)
 	if cfg.AuthPassword != "" {
 		appHandler = auth.BasicAuthMiddleware(cfg.AuthPassword, appHandler)
 	} else {

@@ -144,6 +144,13 @@ underlying store through server-rendered handlers, not this API.
   the web UI and API are completely open to anyone who can reach the port.**
   Sift warns loudly on every boot when it's unset, but does not refuse to
   start, to keep local development simple.
+- **CSRF**: browsers auto-attach cached Basic Auth credentials to any
+  request to an origin they're cached for, including one a malicious page
+  on another site triggers — Basic Auth alone doesn't stop this. Every
+  state-changing request is checked against its `Origin`/`Referer` header
+  (falling back to `X-Forwarded-Host` behind a reverse proxy) and rejected
+  if it doesn't name this host. Requests with neither header — direct API
+  use, curl, scripts — aren't browser-driven and are let through.
 - **Known limitation**: Basic Auth over plain HTTP sends your password on
   every request. Put Sift behind TLS (a reverse proxy like Caddy or Nginx,
   or a tunnel like Tailscale/Cloudflare Tunnel) for anything beyond
