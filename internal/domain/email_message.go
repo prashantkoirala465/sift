@@ -47,6 +47,7 @@ type EmailMessage struct {
 	FromAddress              string
 	FromDomain               string
 	Subject                  string
+	Snippet                  string
 	ReceivedAt               time.Time
 	ClassifiedLabel          *ClassifiedLabel
 	ClassificationConfidence *float64

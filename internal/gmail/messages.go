@@ -12,14 +12,16 @@ import (
 )
 
 // Message is the slice of a Gmail message Sift actually needs. Notably not
-// the body -- classification (task #5) works off subject and sender, and
-// pulling full bodies would mean handling multipart MIME for no benefit.
+// the full body -- Snippet (Gmail's own short plain-text preview, returned
+// even at format=metadata) gives the classifier a bit more than the
+// subject line without Sift ever having to parse multipart MIME.
 type Message struct {
 	ID         string
 	ThreadID   string
 	From       string
 	FromDomain string
 	Subject    string
+	Snippet    string
 	ReceivedAt time.Time
 }
 
@@ -132,7 +134,7 @@ func (s *Service) GetMessage(ctx context.Context, id string) (Message, error) {
 		return Message{}, fmt.Errorf("get message %s: %w", id, err)
 	}
 
-	m := Message{ID: msg.Id, ThreadID: msg.ThreadId, ReceivedAt: time.UnixMilli(msg.InternalDate)}
+	m := Message{ID: msg.Id, ThreadID: msg.ThreadId, Snippet: msg.Snippet, ReceivedAt: time.UnixMilli(msg.InternalDate)}
 	if msg.Payload != nil {
 		for _, h := range msg.Payload.Headers {
 			switch h.Name {

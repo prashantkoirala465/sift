@@ -20,6 +20,7 @@ type Querier interface {
 	InsertStageEvent(ctx context.Context, arg InsertStageEventParams) (StageEvent, error)
 	ListApplications(ctx context.Context) ([]Application, error)
 	ListStageEventsForApplication(ctx context.Context, applicationID pgtype.UUID) ([]StageEvent, error)
+	SetEmailClassification(ctx context.Context, arg SetEmailClassificationParams) error
 	UpdateApplicationStage(ctx context.Context, arg UpdateApplicationStageParams) error
 	UpdateSyncState(ctx context.Context, arg UpdateSyncStateParams) error
 	UpsertOAuthToken(ctx context.Context, arg UpsertOAuthTokenParams) error

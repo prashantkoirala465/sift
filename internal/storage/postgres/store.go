@@ -127,6 +127,7 @@ func (s *Store) InsertEmailMessageIfNew(ctx context.Context, msg domain.EmailMes
 		FromAddress:    msg.FromAddress,
 		FromDomain:     msg.FromDomain,
 		Subject:        msg.Subject,
+		Snippet:        msg.Snippet,
 		ReceivedAt:     pgTimestamptz(msg.ReceivedAt),
 	})
 	if err != nil {
@@ -144,6 +145,24 @@ func (s *Store) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID str
 		return domain.EmailMessage{}, fmt.Errorf("get email message: %w", err)
 	}
 	return emailMessageFromRow(row), nil
+}
+
+// SetEmailClassification records the classifier's verdict for a message.
+// Separate from insertion because classification (and its LLM fallback
+// tier) happens after the message is already durably stored -- a
+// classification failure must never lose the underlying email.
+func (s *Store) SetEmailClassification(ctx context.Context, id uuid.UUID, label domain.ClassifiedLabel, confidence float64, source domain.ClassificationSource) error {
+	labelStr := string(label)
+	sourceStr := string(source)
+	if err := s.q.SetEmailClassification(ctx, sqlc.SetEmailClassificationParams{
+		ID:                       pgUUID(id),
+		ClassifiedLabel:          &labelStr,
+		ClassificationConfidence: &confidence,
+		ClassificationSource:     &sourceStr,
+	}); err != nil {
+		return fmt.Errorf("set email classification: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) GetSyncState(ctx context.Context) (domain.SyncState, error) {

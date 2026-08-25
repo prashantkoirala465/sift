@@ -76,6 +76,7 @@ func emailMessageFromRow(row sqlc.EmailMessage) domain.EmailMessage {
 		FromAddress:              row.FromAddress,
 		FromDomain:               row.FromDomain,
 		Subject:                  row.Subject,
+		Snippet:                  row.Snippet,
 		ReceivedAt:               row.ReceivedAt.Time,
 		ClassificationConfidence: row.ClassificationConfidence,
 		MatchedApplicationID:     fromPgUUIDPtr(row.MatchedApplicationID),

@@ -35,6 +35,7 @@ type EmailMessage struct {
 	ReviewStatus             string             `json:"review_status"`
 	ProcessedAt              pgtype.Timestamptz `json:"processed_at"`
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	Snippet                  string             `json:"snippet"`
 }
 
 type OauthToken struct {

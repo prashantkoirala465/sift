@@ -12,7 +12,7 @@ import (
 )
 
 const getEmailMessageByGmailID = `-- name: GetEmailMessageByGmailID :one
-SELECT id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at FROM email_messages WHERE gmail_message_id = $1
+SELECT id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at, snippet FROM email_messages WHERE gmail_message_id = $1
 `
 
 func (q *Queries) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID string) (EmailMessage, error) {
@@ -34,15 +34,16 @@ func (q *Queries) GetEmailMessageByGmailID(ctx context.Context, gmailMessageID s
 		&i.ReviewStatus,
 		&i.ProcessedAt,
 		&i.CreatedAt,
+		&i.Snippet,
 	)
 	return i, err
 }
 
 const insertEmailMessageIfNew = `-- name: InsertEmailMessageIfNew :one
-INSERT INTO email_messages (gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO email_messages (gmail_message_id, gmail_thread_id, from_address, from_domain, subject, snippet, received_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (gmail_message_id) DO NOTHING
-RETURNING id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at
+RETURNING id, gmail_message_id, gmail_thread_id, from_address, from_domain, subject, received_at, classified_label, classification_confidence, classification_source, matched_application_id, match_confidence, review_status, processed_at, created_at, snippet
 `
 
 type InsertEmailMessageIfNewParams struct {
@@ -51,6 +52,7 @@ type InsertEmailMessageIfNewParams struct {
 	FromAddress    string             `json:"from_address"`
 	FromDomain     string             `json:"from_domain"`
 	Subject        string             `json:"subject"`
+	Snippet        string             `json:"snippet"`
 	ReceivedAt     pgtype.Timestamptz `json:"received_at"`
 }
 
@@ -61,6 +63,7 @@ func (q *Queries) InsertEmailMessageIfNew(ctx context.Context, arg InsertEmailMe
 		arg.FromAddress,
 		arg.FromDomain,
 		arg.Subject,
+		arg.Snippet,
 		arg.ReceivedAt,
 	)
 	var i EmailMessage
@@ -80,6 +83,33 @@ func (q *Queries) InsertEmailMessageIfNew(ctx context.Context, arg InsertEmailMe
 		&i.ReviewStatus,
 		&i.ProcessedAt,
 		&i.CreatedAt,
+		&i.Snippet,
 	)
 	return i, err
+}
+
+const setEmailClassification = `-- name: SetEmailClassification :exec
+UPDATE email_messages
+SET classified_label = $2,
+    classification_confidence = $3,
+    classification_source = $4,
+    processed_at = now()
+WHERE id = $1
+`
+
+type SetEmailClassificationParams struct {
+	ID                       pgtype.UUID `json:"id"`
+	ClassifiedLabel          *string     `json:"classified_label"`
+	ClassificationConfidence *float64    `json:"classification_confidence"`
+	ClassificationSource     *string     `json:"classification_source"`
+}
+
+func (q *Queries) SetEmailClassification(ctx context.Context, arg SetEmailClassificationParams) error {
+	_, err := q.db.Exec(ctx, setEmailClassification,
+		arg.ID,
+		arg.ClassifiedLabel,
+		arg.ClassificationConfidence,
+		arg.ClassificationSource,
+	)
+	return err
 }
