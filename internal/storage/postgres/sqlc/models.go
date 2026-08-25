@@ -37,6 +37,16 @@ type EmailMessage struct {
 	CreatedAt                pgtype.Timestamptz `json:"created_at"`
 }
 
+type OauthToken struct {
+	ID                    int16              `json:"id"`
+	Provider              string             `json:"provider"`
+	AccessTokenEncrypted  []byte             `json:"access_token_encrypted"`
+	RefreshTokenEncrypted []byte             `json:"refresh_token_encrypted"`
+	TokenType             string             `json:"token_type"`
+	Expiry                pgtype.Timestamptz `json:"expiry"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
 type StageEvent struct {
 	ID            pgtype.UUID        `json:"id"`
 	ApplicationID pgtype.UUID        `json:"application_id"`
