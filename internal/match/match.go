@@ -14,6 +14,7 @@ import (
 
 	"github.com/prashantkoirala465/sift/internal/classify"
 	"github.com/prashantkoirala465/sift/internal/domain"
+	"github.com/prashantkoirala465/sift/internal/observability"
 )
 
 // autoApplyThreshold: a match below this confidence is still recorded (so
@@ -141,6 +142,7 @@ func ApplyImpliedTransition(ctx context.Context, store StageWriter, applicationI
 	if _, err := store.RecordStageEvent(ctx, applicationID, app.CurrentStage, targetStage, detectedVia, sourceEmailID, confidence, ""); err != nil {
 		return false, err
 	}
+	observability.StageTransitionsByVia.Add(string(detectedVia), 1)
 	return true, nil
 }
 

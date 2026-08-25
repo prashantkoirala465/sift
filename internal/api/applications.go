@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/prashantkoirala465/sift/internal/domain"
+	"github.com/prashantkoirala465/sift/internal/observability"
 )
 
 const dateLayout = "2006-01-02"
@@ -192,6 +193,9 @@ func handleRecordStage(deps Deps) http.HandlerFunc {
 		}
 
 		event, err := deps.Store.RecordStageEvent(r.Context(), id, app.CurrentStage, toStage, domain.DetectedViaManual, nil, nil, req.Note)
+		if err == nil {
+			observability.StageTransitionsByVia.Add(string(domain.DetectedViaManual), 1)
+		}
 		if err != nil {
 			var invalid domain.ErrInvalidTransition
 			if errors.As(err, &invalid) {

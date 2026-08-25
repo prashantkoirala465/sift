@@ -12,6 +12,7 @@ import (
 	"github.com/prashantkoirala465/sift/internal/domain"
 	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/match"
+	"github.com/prashantkoirala465/sift/internal/observability"
 )
 
 const dateLayout = "2006-01-02"
@@ -249,6 +250,7 @@ func handleRecordStage(deps Deps) http.HandlerFunc {
 			slog.Error("record stage event failed", "error", err)
 			return
 		}
+		observability.StageTransitionsByVia.Add(string(domain.DetectedViaManual), 1)
 		http.Redirect(w, r, "/applications/"+id.String(), http.StatusSeeOther)
 	}
 }

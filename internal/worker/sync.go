@@ -17,6 +17,7 @@ import (
 	"github.com/prashantkoirala465/sift/internal/domain"
 	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/match"
+	"github.com/prashantkoirala465/sift/internal/observability"
 )
 
 // Store is what the sync worker needs from storage, kept narrow so this
@@ -77,33 +78,40 @@ func (w *SyncWorker) tick(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
+	observability.SyncTicksTotal.Add(1)
+
 	httpClient, err := gmail.HTTPClient(ctx, w.oauth, w.store)
 	if err != nil {
 		if errors.Is(err, gmail.ErrNoToken) {
 			w.logger.Debug("sync tick skipped: gmail not connected")
 			return
 		}
+		observability.SyncTickErrorsTotal.Add(1)
 		w.logger.Error("sync tick: build gmail client", "error", err)
 		return
 	}
 
 	svc, err := gmail.NewService(ctx, httpClient)
 	if err != nil {
+		observability.SyncTickErrorsTotal.Add(1)
 		w.logger.Error("sync tick: create gmail service", "error", err)
 		return
 	}
 
 	state, err := w.store.GetSyncState(ctx)
 	if err != nil {
+		observability.SyncTickErrorsTotal.Add(1)
 		w.logger.Error("sync tick: load sync state", "error", err)
 		return
 	}
 
 	ids, newHistoryID, err := w.fetchIDs(ctx, svc, state)
 	if err != nil {
+		observability.SyncTickErrorsTotal.Add(1)
 		w.logger.Error("sync tick: fetch message ids", "error", err)
 		return
 	}
+	observability.EmailsSeenTotal.Add(int64(len(ids)))
 
 	inserted := w.ingest(ctx, svc, ids)
 
@@ -112,6 +120,7 @@ func (w *SyncWorker) tick(ctx context.Context) {
 		LastHistoryID: strconv.FormatUint(newHistoryID, 10),
 		LastSyncedAt:  &now,
 	}); err != nil {
+		observability.SyncTickErrorsTotal.Add(1)
 		w.logger.Error("sync tick: save sync state", "error", err)
 		return
 	}
@@ -186,6 +195,7 @@ func (w *SyncWorker) ingest(ctx context.Context, svc *gmail.Service, ids []strin
 			continue
 		}
 		inserted++
+		observability.EmailsIngestedTotal.Add(1)
 
 		// Classification failure here would only lose the label, never the
 		// message -- it's already durably stored above.
@@ -194,6 +204,7 @@ func (w *SyncWorker) ingest(ctx context.Context, svc *gmail.Service, ids []strin
 			Snippet:    msg.Snippet,
 			FromDomain: msg.FromDomain,
 		})
+		observability.ClassificationsBySource.Add(string(result.Source), 1)
 		if err := w.store.SetEmailClassification(ctx, stored.ID, result.Label, result.Confidence, result.Source); err != nil {
 			w.logger.Error("sync tick: save classification failed", "gmail_message_id", id, "error", err)
 			continue
