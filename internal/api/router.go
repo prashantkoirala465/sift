@@ -5,12 +5,25 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"golang.org/x/oauth2"
+
+	"github.com/prashantkoirala465/sift/internal/gmail"
 )
 
-func NewRouter() http.Handler {
+// Deps are the dependencies handlers need. OAuthConfig is nil when Google
+// OAuth hasn't been configured -- the auth routes still register, they just
+// respond 503 until it is.
+type Deps struct {
+	OAuthConfig *oauth2.Config
+	TokenStore  gmail.TokenStore
+}
+
+func NewRouter(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", handleHealthz)
+	registerAuthRoutes(mux, deps)
 
 	return mux
 }
