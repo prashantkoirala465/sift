@@ -40,6 +40,15 @@ var labelStageTransitions = map[domain.ClassifiedLabel]domain.Stage{
 	domain.LabelInterview: domain.StageInterview,
 }
 
+// StageWriter is the subset of storage ApplyImpliedTransition needs.
+// Narrower than Store on purpose: the review-queue API has no reason to
+// depend on the matcher's own signal-finding methods just to reuse this
+// one piece of logic.
+type StageWriter interface {
+	GetApplication(ctx context.Context, id uuid.UUID) (domain.Application, error)
+	RecordStageEvent(ctx context.Context, applicationID uuid.UUID, from, to domain.Stage, detectedVia domain.DetectedVia, sourceEmailID *uuid.UUID, confidence *float64, note string) (domain.StageEvent, error)
+}
+
 // Store is what the matcher needs from storage, kept narrow so this
 // package doesn't depend on Postgres directly.
 type Store interface {
@@ -93,32 +102,46 @@ func (m *Matcher) Resolve(ctx context.Context, msg domain.EmailMessage) error {
 		return nil
 	}
 
-	return m.maybeAdvance(ctx, msg, cand)
-}
-
-func (m *Matcher) maybeAdvance(ctx context.Context, msg domain.EmailMessage, cand *candidate) error {
 	if msg.ClassifiedLabel == nil {
 		return nil
 	}
-	targetStage, ok := labelStageTransitions[*msg.ClassifiedLabel]
-	if !ok {
-		return nil
-	}
-
-	app, err := m.store.GetApplication(ctx, cand.applicationID)
+	confidence := cand.confidence
+	applied, err := ApplyImpliedTransition(ctx, m.store, cand.applicationID, *msg.ClassifiedLabel, domain.DetectedViaEmailAuto, &msg.ID, &confidence)
 	if err != nil {
 		return err
 	}
-	if !domain.CanTransition(app.CurrentStage, targetStage) {
+	if !applied {
 		m.logger.Info("matched email implies a transition the state machine won't allow, leaving for manual review",
-			"application_id", cand.applicationID, "from", app.CurrentStage, "to", targetStage)
-		return nil
+			"application_id", cand.applicationID, "label", *msg.ClassifiedLabel)
+	}
+	return nil
+}
+
+// ApplyImpliedTransition records label's implied stage as a StageEvent on
+// applicationID, if the label implies a stage at all and that stage is a
+// valid transition from the application's current one. Returns whether it
+// applied, so callers can distinguish "nothing to do" from "the state
+// machine rejected it" without duplicating the CanTransition check
+// themselves -- used both by the automatic matching path above and by the
+// review-queue API's human-confirmed match.
+func ApplyImpliedTransition(ctx context.Context, store StageWriter, applicationID uuid.UUID, label domain.ClassifiedLabel, detectedVia domain.DetectedVia, sourceEmailID *uuid.UUID, confidence *float64) (bool, error) {
+	targetStage, ok := labelStageTransitions[label]
+	if !ok {
+		return false, nil
 	}
 
-	confidence := cand.confidence
-	_, err = m.store.RecordStageEvent(ctx, cand.applicationID, app.CurrentStage, targetStage,
-		domain.DetectedViaEmailAuto, &msg.ID, &confidence, "")
-	return err
+	app, err := store.GetApplication(ctx, applicationID)
+	if err != nil {
+		return false, err
+	}
+	if !domain.CanTransition(app.CurrentStage, targetStage) {
+		return false, nil
+	}
+
+	if _, err := store.RecordStageEvent(ctx, applicationID, app.CurrentStage, targetStage, detectedVia, sourceEmailID, confidence, ""); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // find tries each signal in order of reliability, returning the first
