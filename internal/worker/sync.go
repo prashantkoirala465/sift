@@ -31,6 +31,17 @@ type Store interface {
 	SetEmailClassification(ctx context.Context, id uuid.UUID, label domain.ClassifiedLabel, confidence float64, source domain.ClassificationSource) error
 }
 
+// GmailService is the subset of *gmail.Service the sync worker calls.
+// Narrowed to an interface purely so the worker's decision logic
+// (backfill vs incremental, history-expired fallback) can be tested
+// against a fake instead of a real Gmail client.
+type GmailService interface {
+	CurrentHistoryID(ctx context.Context) (uint64, error)
+	ListRecent(ctx context.Context, query string, maxResults int64) ([]string, error)
+	ListHistorySince(ctx context.Context, historyID uint64) ([]string, uint64, error)
+	GetMessage(ctx context.Context, id string) (gmail.Message, error)
+}
+
 // initialBackfillQuery bounds the very first sync (and any resync forced by
 // an expired history checkpoint) to recent mail -- scanning someone's
 // entire mailbox history would be slow and mostly irrelevant to active
@@ -134,7 +145,7 @@ func (w *SyncWorker) tick(ctx context.Context) {
 // backfill, and captures the new checkpoint before processing any message
 // so a message that arrives mid-tick is picked up next tick rather than
 // dropped.
-func (w *SyncWorker) fetchIDs(ctx context.Context, svc *gmail.Service, state domain.SyncState) ([]string, uint64, error) {
+func (w *SyncWorker) fetchIDs(ctx context.Context, svc GmailService, state domain.SyncState) ([]string, uint64, error) {
 	if state.LastHistoryID == "" {
 		return w.backfill(ctx, svc)
 	}
@@ -153,7 +164,7 @@ func (w *SyncWorker) fetchIDs(ctx context.Context, svc *gmail.Service, state dom
 	return ids, newHistoryID, err
 }
 
-func (w *SyncWorker) backfill(ctx context.Context, svc *gmail.Service) ([]string, uint64, error) {
+func (w *SyncWorker) backfill(ctx context.Context, svc GmailService) ([]string, uint64, error) {
 	checkpoint, err := svc.CurrentHistoryID(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -169,7 +180,7 @@ func (w *SyncWorker) backfill(ctx context.Context, svc *gmail.Service) ([]string
 // ingest fetches and stores each message. One bad message (deleted between
 // the history event and the fetch, malformed headers) is logged and
 // skipped rather than aborting the whole tick.
-func (w *SyncWorker) ingest(ctx context.Context, svc *gmail.Service, ids []string) int {
+func (w *SyncWorker) ingest(ctx context.Context, svc GmailService, ids []string) int {
 	inserted := 0
 	for _, id := range ids {
 		msg, err := svc.GetMessage(ctx, id)
