@@ -6,9 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/prashantkoirala465/sift/internal/domain"
+	"github.com/prashantkoirala465/sift/internal/security"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
 )
+
+var testEncryptionKey = make([]byte, security.KeySize) // all-zero key: fine for tests, never for real use
 
 // requireStore skips the test unless SIFT_TEST_DATABASE_URL points at a real
 // Postgres instance. Migrations run against it before every test to keep
@@ -32,7 +37,7 @@ func requireStore(t *testing.T) *postgres.Store {
 	}
 	t.Cleanup(pool.Close)
 
-	return postgres.NewStore(pool)
+	return postgres.NewStore(pool, testEncryptionKey)
 }
 
 func TestApplicationRoundTrip(t *testing.T) {
@@ -110,5 +115,46 @@ func TestRecordStageEventRejectsInvalidTransition(t *testing.T) {
 	}
 	if unchanged.CurrentStage != domain.StageApplied {
 		t.Errorf("application.CurrentStage = %s, want unchanged %s after rejected transition", unchanged.CurrentStage, domain.StageApplied)
+	}
+}
+
+func TestOAuthTokenRoundTrip(t *testing.T) {
+	store := requireStore(t)
+	ctx := context.Background()
+
+	want := &oauth2.Token{
+		AccessToken:  "ya29.test-access-token",
+		RefreshToken: "1//test-refresh-token",
+		TokenType:    "Bearer",
+		Expiry:       time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond),
+	}
+
+	if err := store.SaveToken(ctx, want); err != nil {
+		t.Fatalf("save token: %v", err)
+	}
+
+	got, err := store.LoadToken(ctx)
+	if err != nil {
+		t.Fatalf("load token: %v", err)
+	}
+
+	if got.AccessToken != want.AccessToken || got.RefreshToken != want.RefreshToken || got.TokenType != want.TokenType {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	if !got.Expiry.Equal(want.Expiry) {
+		t.Errorf("got expiry %v, want %v", got.Expiry, want.Expiry)
+	}
+
+	// Saving again must overwrite the singleton row, not fail or duplicate.
+	want.AccessToken = "ya29.rotated-access-token"
+	if err := store.SaveToken(ctx, want); err != nil {
+		t.Fatalf("save token (overwrite): %v", err)
+	}
+	got, err = store.LoadToken(ctx)
+	if err != nil {
+		t.Fatalf("load token after overwrite: %v", err)
+	}
+	if got.AccessToken != want.AccessToken {
+		t.Errorf("got access token %q after overwrite, want %q", got.AccessToken, want.AccessToken)
 	}
 }
