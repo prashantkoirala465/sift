@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"expvar"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/prashantkoirala465/sift/internal/config"
 	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/match"
+	"github.com/prashantkoirala465/sift/internal/observability"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
 	"github.com/prashantkoirala465/sift/internal/web"
 	"github.com/prashantkoirala465/sift/internal/worker"
@@ -82,10 +84,11 @@ func run(logger *slog.Logger) error {
 		Store:      store,
 		TokenStore: store,
 	})
+	mux.Handle("GET /debug/vars", expvar.Handler())
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           mux,
+		Handler:           observability.LoggingMiddleware(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
