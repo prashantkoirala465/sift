@@ -16,6 +16,7 @@ import (
 	"github.com/prashantkoirala465/sift/internal/config"
 	"github.com/prashantkoirala465/sift/internal/gmail"
 	"github.com/prashantkoirala465/sift/internal/storage/postgres"
+	"github.com/prashantkoirala465/sift/internal/worker"
 )
 
 func main() {
@@ -55,6 +56,9 @@ func run(logger *slog.Logger) error {
 	} else {
 		logger.Warn("Google OAuth not configured, /auth/google routes will 503 until SIFT_GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL are set")
 	}
+
+	syncWorker := worker.NewSyncWorker(store, oauthCfg, logger)
+	go syncWorker.Run(ctx, cfg.SyncInterval)
 
 	srv := &http.Server{
 		Addr: cfg.Addr,

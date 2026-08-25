@@ -7,6 +7,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/prashantkoirala465/sift/internal/security"
 )
@@ -28,6 +29,9 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
+
+	// SyncInterval is how often the Gmail sync worker ticks.
+	SyncInterval time.Duration
 }
 
 func Load() (Config, error) {
@@ -42,6 +46,13 @@ func Load() (Config, error) {
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("SIFT_DATABASE_URL is required")
 	}
+
+	syncInterval := getEnv("SIFT_SYNC_INTERVAL", "5m")
+	interval, err := time.ParseDuration(syncInterval)
+	if err != nil {
+		return Config{}, fmt.Errorf("SIFT_SYNC_INTERVAL: %w", err)
+	}
+	cfg.SyncInterval = interval
 
 	keyB64 := os.Getenv("SIFT_ENCRYPTION_KEY")
 	if keyB64 == "" {
